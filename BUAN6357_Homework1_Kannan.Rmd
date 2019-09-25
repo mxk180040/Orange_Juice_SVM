@@ -1,0 +1,297 @@
+---
+title: "Support Vector Machine"
+author: ''
+date: '`r format(Sys.Date(), "%Y-%B-%d")`'
+output: 
+  pdf_document:
+    toc: yes
+  html_document: 
+    theme: readable
+    toc: yes
+subtitle: (using Caret package)
+editor_options:
+  chunk_output_type: console
+---
+
+```{r loadpackages, include=FALSE}
+pacman::p_load(e1071, ggplot2, caret, rmarkdown, corrplot,tidyverse,knitr)
+search()
+theme_set(theme_classic())
+options(digits = 3)
+```
+
+## HOMEWORK 1
+
+Create a training set containing a random sample of 80% of the observations in the “juice.csv” data set using createDataPartition(). Create a test data set containing the remaining observations.Fit a SVM model to the training data using cost=0.01, with Purchase as the response and the other variables as predictors.Calculate the training and testing error for linear SVM model.Perform tune() function to find an optimal cost and re-run the SVM model to find training and testing error.Now perform the SVM model using "radial" and "polynomial" kernel in order to find which approach gives best result on this data
+
+## Data Summary:
+The “juice.csv” data contains purchase information for Citrus Hill or Minute Maid orange juice. A description of the variables follows.
+
+
+1. Purchase: A factor with levels CH and MM indicating whether the customer purchased Citrus Hill or Minute Maid Orange Juice  
+2. WeekofPurchase: Week of purchase  
+3. StoreID: Store ID  
+4. PriceCH: Price charged for CH  
+5. PriceMM: Price charged for MM  
+6. DiscCH: Discount offered for CH  
+7. DiscMM: Discount offered for MM  
+8. SpecialCH: Indicator of special on CH  
+9. SpecialMM: Indicator of special on MM  
+10. LoyalCH: Customer brand loyalty for CH  
+11. SalePriceMM: Sale price for MM  
+12. SalePriceCH: Sale price for CH  
+13. PriceDiff: Sale price of MM less sale price of CH  
+14. Store7: A factor with levels No and Yes indicating whether the sale is at Store 7  
+15. PctDiscMM: Percentage discount for MM  
+16. PctDiscCH: Percentage discount for CH  
+17. ListPriceDiff: List price of MM less list price of CH  
+18. STORE: Which of 5 possible stores the sale occured at  
+
+##  Question 1. 
+Create a training set containing a random sample of 80% of the observations in the “juice.csv” data set using createDataPartition(). Create a test data set containing the remaining observations.
+```{r readdata}
+#Read the juice.csv dataset
+juice_df <- read.csv("juice.csv")
+juice_df <- juice_df[,-c(4,5,14,17,18)]
+juice_df$StoreID = as.factor(juice_df$StoreID)
+
+dim(juice_df)
+str(juice_df)
+```
+
+### Create data partition:
+```{r datapartition}
+#Step 1: Perform DataPartition
+set.seed(123)
+train_index <- createDataPartition(juice_df$Purchase, p=0.8, list=FALSE)
+juice_train <- juice_df[train_index, ]
+juice_test <- juice_df[-train_index,  ]
+
+```
+
+## Question 2.
+Fit a SVM model to the training data using cost=0.01, with Purchase as the response and the other variables as predictors. Use the summary() function to produce summary statistics, and describe the results obtained.
+
+### Linear SVM using C-Classification
+
+```{r svm_linear}
+## Performance Evaluation ##
+# generate predicted values based on training data
+svm_linear <- svm(Purchase~., data=juice_train,kernel="linear",cost=0.01)
+summary(svm_linear)
+```
+Support vector classifier creates `r svm_linear$tot.nSV` support vectors out of 800 training points. Out of 
+these  `r svm_linear$nSV[1]` belong to level CH and remaining `r svm_linear$nSV[2]` belong to level MM.
+
+## Question 3.
+3. What are the training and test error rates?
+
+```{r error}
+pred_train_linear <- predict(svm_linear, juice_train)
+conf.matrix<-(table(Predicted = pred_train_linear, Actual = juice_train$Purchase))
+conf.matrix
+
+train_error_li<-1-(sum(diag(conf.matrix))) / sum(conf.matrix)
+train_error_li
+  
+## Performance Evaluation ##
+# generate predicted values based on Testing data
+pred_test_linear <- predict(svm_linear, juice_test)
+conf.matrix<-(table(Predicted = pred_test_linear, Actual = juice_test$Purchase))
+conf.matrix
+test_error_li<-1-(sum(diag(conf.matrix))) / sum(conf.matrix)
+test_error_li
+
+```
+
+The Training Error for Linear SVM: `r train_error_li`  
+The Testing Error for Linear SVM: `r test_error_li`
+
+## Question 4.
+Use the tune() function to select an optimal cost. Consider values in the range 0.01 to 10.
+
+### Hyperparameter Optimization for Linear SVM 
+```{r optimal cost_linear}
+## Hyperparameter Optimization ##
+set.seed(123)
+tunesvm_linear <- tune(svm, Purchase~., data = juice_train,kernel="linear",
+                 ranges = list(cost = 10^seq(-2,1, by = 0.25)))
+summary(tunesvm_linear)
+plot(tunesvm_linear)
+```
+
+THe optimal cost after tuning is `r tunesvm_linear$best.parameters$cost`
+
+## Question 5.
+Compute and report the training and test error rates using this new value for cost.
+
+```{r hyperparameter_linear}
+# Tuning shows that optimal cost is 
+svm1_linear <- svm(Purchase~., data=juice_train,kernel="linear",cost=tunesvm_linear$best.parameters$cost,scale = FALSE)
+summary(svm1_linear)
+
+
+## Performance Evaluation ##
+# generate predicted values based on training data
+pred_train1_linear <- predict(svm1_linear, juice_train)
+conf.matrix<-(table(Predicted = pred_train1_linear, Actual = juice_train$Purchase))
+conf.matrix
+train_error_li_tune<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+train_error_li_tune
+## Performance Evaluation ##
+# generate predicted values based on Testing data
+pred_test1_linear <- predict(svm1_linear, juice_test)
+conf.matrix<-(table(Predicted = pred_test1_linear, Actual = juice_test$Purchase))
+conf.matrix
+test_error_li_tune<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+test_error_li_tune
+```
+
+The Training Error for Linear SVM after tuning: `r train_error_li_tune`  
+The Testing Error for Linear SVM after tuning: `r test_error_li_tune`
+
+
+The training error decreases to `r train_error_li_tune*100`% but test error slightly increases to `r test_error_li_tune*100`% by using best cost.
+
+## Question 6.
+Repeat parts (2.) through (5.) using a support vector machine with a radial kernel. Use the default value for gamma.
+
+### Radial SVM using C-Classification
+```{r svm_radial1}
+### Fit an SVM with radial kernel.
+## SVM Model ## [CAN BE USED FOR CLASSIFICATION OR REGRESSION]
+
+svm_radial <- svm(Purchase~., data=juice_train,kernel="radial",cost=0.01)
+summary(svm_radial)
+
+
+## Performance Evaluation ##
+# generate predicted values based on training data
+pred_train_radial <- predict(svm_radial, juice_train)
+conf.matrix<-(table(Predicted = pred_train_radial, Actual = juice_train$Purchase))
+conf.matrix
+train_error_radial<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+train_error_radial
+## Performance Evaluation ##
+# generate predicted values based on Testing data
+pred_test_radial <- predict(svm_radial, juice_test)
+conf.matrix<-(table(Predicted = pred_test_radial, Actual = juice_test$Purchase))
+conf.matrix
+test_error_radial<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+test_error_radial
+```
+
+The Training Error for radial SVM: `r train_error_radial`  
+The Testing Error for radial SVM: `r test_error_radial`
+
+### Hyperparameter Optimization for radial SVM
+```{r hyperparameter_radial}
+## Hyperparameter Optimization ##
+set.seed(123)
+tunesvm_radial <- tune(svm, Purchase~., data = juice_train,kernel="radial",
+                 ranges = list(cost = 10^seq(-2,1, by = 0.25)))
+
+summary(tunesvm_radial)
+plot(tunesvm_radial)
+
+# Tuning shows that optimal cost is 
+svm1_radial <- svm(Purchase~., data=juice_train,kernel="radial",cost=tunesvm_radial$best.parameters$cost)
+summary(svm1_radial)
+
+
+## Performance Evaluation ##
+# generate predicted values based on training data
+pred_train1_radial <- predict(svm1_radial, juice_train)
+conf.matrix<-(table(Predicted = pred_train1_radial, Actual = juice_train$Purchase))
+conf.matrix
+train_error_radial_tune<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+train_error_radial_tune
+
+## Performance Evaluation ##
+# generate predicted values based on Testing data
+pred_test1_radial1 <- predict(svm1_radial, juice_test)
+conf.matrix<-(table(Predicted = pred_test1_radial1, Actual = juice_test$Purchase))
+conf.matrix
+test_error_radial_tune<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+test_error_radial_tune
+```
+
+The Training Error for radial SVM after tuning: `r train_error_li_tune`  
+The Testing Error for radial SVM after tuning: `r test_error_li_tune`
+
+Tuning slightly decreases training error to `r train_error_li_tune*100`% and slightly increases test error to `r test_error_li_tune*100`% which is still better than linear kernel.
+
+## Question 7.
+Repeat parts (2.) through (5.) using a support vector machine with a polynomial kernel. Set degree=2.
+
+### Polynomial SVM using C-Classification
+
+```{r svm_polynomial1}
+### Fit an SVM with polynomial kernel.
+## SVM Model ## [CAN BE USED FOR CLASSIFICATION OR REGRESSION]
+
+svm_polynomial <- svm(Purchase~., data=juice_train,kernel="polynomial",cost=0.01,degree=2)
+summary(svm_polynomial)
+
+
+## Performance Evaluation ##
+# generate predicted values based on training data
+pred_train_poly <- predict(svm_polynomial, juice_train)
+conf.matrix<-(table(Predicted = pred_train_poly, Actual = juice_train$Purchase))
+conf.matrix
+train_error_poly<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+train_error_poly
+
+## Performance Evaluation ##
+# generate predicted values based on Testing data
+pred_test_poly <- predict(svm_polynomial, juice_test)
+conf.matrix<-(table(Predicted = pred_test_poly, Actual = juice_test$Purchase))
+conf.matrix
+test_error_poly<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+test_error_poly
+```
+
+The Training Error for polynomial SVM: `r train_error_poly`  
+The Testing Error for polynomial SVM: `r test_error_poly`
+
+### Hyperparameter Optimization for polynomial SVM
+```{r hyperparameter_polynomial}
+## Hyperparameter Optimization ##
+set.seed(123)
+tunesvm_ploy <- tune(svm, Purchase~., data = juice_train,kernel="polynomial",degree=2,
+                       ranges = list(cost = 10^seq(-2,1, by = 0.25)))
+summary(tunesvm_ploy)
+plot(tunesvm_ploy)
+
+# Tuning shows that optimal cost is 
+svm1_ploy <- svm(Purchase~., data=juice_train,kernel="polynomial",cost=tunesvm_ploy$best.parameters$cost)
+summary(svm1_ploy)
+
+
+## Performance Evaluation ##
+# generate predicted values based on training data
+pred_train1_ploy <- predict(svm1_ploy, juice_train)
+conf.matrix<-(table(Predicted = pred_train1_ploy, Actual = juice_train$Purchase))
+conf.matrix
+train_error_poly_tune<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+train_error_poly_tune
+
+## Performance Evaluation ##
+# generate predicted values based on Testing data
+pred_test1_poly <- predict(svm1_ploy, juice_test)
+conf.matrix<-(table(Predicted = pred_test1_poly, Actual = juice_test$Purchase))
+conf.matrix
+test_error_poly_tune<-1-(sum(diag(conf.matrix)) / sum(conf.matrix))
+test_error_poly_tune
+
+```
+The Training Error for polynomial SVM after tuning : `r train_error_poly_tune`  
+The Testing Error for polynomial SVM after tuning: `r test_error_poly_tune`
+
+Tuning reduces the training error to `r train_error_poly_tune*100`% and test error to `r test_error_poly_tune*100`% which is worse than radial kernel but slightly better than linear kernel.
+
+## Question 8.
+Overall, which approach seems to give the best results on this data?
+
+
+Overall, radial basis kernel seems to be producing minimum misclassification error on both train and test data.
